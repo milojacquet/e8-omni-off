@@ -4,6 +4,8 @@ use crate::Ring::oo;
 use nalgebra::RowSVector;
 use nalgebra::SMatrix;
 use nalgebra::matrix;
+use rand::distr::StandardUniform;
+use rand::prelude::*;
 use std::ops::Mul;
 
 type Point = RowSVector<i8, 8>;
@@ -21,6 +23,17 @@ enum Mirror {
 }
 
 impl Mirror {
+    const ALL: [Self; 8] = [
+        Self::A0,
+        Self::A1,
+        Self::A2,
+        Self::A3,
+        Self::B0,
+        Self::B1,
+        Self::C,
+        Self::M,
+    ];
+
     /// reflection pole with norm 2√2
     fn vec(&self) -> Point {
         match self {
@@ -48,6 +61,10 @@ impl E8 {
     fn identity() -> Self {
         E8(SMatrix::identity() * 2)
     }
+
+    fn inv(self) -> Self {
+        E8(self.0.transpose())
+    }
 }
 
 impl Mul<E8> for E8 {
@@ -61,6 +78,12 @@ impl Mul<E8> for Point {
     type Output = Point;
     fn mul(self, other: E8) -> Point {
         self * other.0 / 4
+    }
+}
+
+impl Distribution<E8> for StandardUniform {
+    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> E8 {
+        MirrorSet::e8().sample(rng)
     }
 }
 
@@ -103,6 +126,19 @@ impl MirrorSet {
             b1: oo,
             c: oo,
             m: oo,
+        }
+    }
+
+    fn e8() -> Self {
+        Self {
+            a0: XX,
+            a1: XX,
+            a2: XX,
+            a3: XX,
+            b0: XX,
+            b1: XX,
+            c: XX,
+            m: XX,
         }
     }
 
@@ -220,9 +256,56 @@ impl MirrorSet {
 
         order
     }
+
+    fn vertex(self) -> Point {
+        let cvec: Point = Mirror::ALL
+            .map(|mirror| if self.has(mirror) { 1 } else { 0 })
+            .into();
+        let cmat = matrix![
+            0, 0, 0, 0, 0, 0, -2, 2;
+            0, 0, 0, 0, 0, -2, -2, 4;
+            0, 0, 0, 0, -2, -2, -2, 6;
+            0, 0, 0, -2, -2, -2, -2, 8;
+            0, 0, 0, 0, 0, 0, 0, 4;
+            1, 1, 1, 1, 1, 1, 1, -7;
+            1, -1, -1, -1, -1, -1, -1, 5;
+            0, 0, -2, -2, -2, -2, -2, 10
+        ];
+        cvec * cmat
+    }
 }
 
-fn main() {}
+impl Distribution<E8> for MirrorSet {
+    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> E8 {
+        let mut gens = Mirror::ALL.map(|mirror| {
+            if self.has(mirror) {
+                mirror.mat()
+            } else {
+                E8::identity()
+            }
+        });
+        for _ in 0..100 {
+            let ind1 = rng.random_range(0..8);
+            let ind2 = rng.random_range(0..7);
+            let ind2 = ind2 + if ind2 >= ind1 { 1 } else { 0 };
+            let mul = if rng.random() {
+                gens[ind2]
+            } else {
+                gens[ind2].inv()
+            };
+            if rng.random() {
+                gens[ind1] = gens[ind1] * mul;
+            } else {
+                gens[ind1] = mul * gens[ind1];
+            };
+        }
+        gens[rng.random_range(0..8)]
+    }
+}
+
+fn main() {
+    print!("{}", MirrorSet::e8().vertex())
+}
 
 #[cfg(test)]
 mod tests {
@@ -246,6 +329,28 @@ mod tests {
                     );
                 }
             }
+        }
+    }
+
+    #[test]
+    fn all_vertex_dots_equal() {
+        for bits in 1..=255 {
+            let mirrors = MirrorSet::from_bits(bits);
+            let vertex = mirrors.vertex();
+            let dot = Mirror::ALL
+                .iter()
+                .find(|mirror| mirrors.has(**mirror))
+                .unwrap()
+                .vec()
+                .dot(&vertex);
+            assert_ne!(dot, 0);
+            assert!(
+                Mirror::ALL.iter().all(|mirror| mirror.vec().dot(&vertex)
+                    == if mirrors.has(*mirror) { dot } else { 0 }),
+                "{:08b}, {:?}",
+                bits,
+                Mirror::ALL.map(|mirror| mirror.vec().dot(&vertex)),
+            )
         }
     }
 }
