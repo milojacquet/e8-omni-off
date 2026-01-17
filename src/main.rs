@@ -8,7 +8,8 @@ use rand::prelude::*;
 use std::ops::Mul;
 
 mod e8;
+mod point;
 
 fn main() {
-    print!("{}", MirrorSet::e8().vertex())
+    print!("{:?}", MirrorSet::e8().vertex())
 }

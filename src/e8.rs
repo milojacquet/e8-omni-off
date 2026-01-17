@@ -1,13 +1,12 @@
 use crate::e8::Ring::XX;
 use crate::e8::Ring::oo;
+use crate::point::Point;
 use nalgebra::RowSVector;
 use nalgebra::SMatrix;
 use nalgebra::matrix;
 use rand::distr::StandardUniform;
 use rand::prelude::*;
 use std::ops::Mul;
-
-pub type Point = RowSVector<i8, 8>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Mirror {
@@ -34,8 +33,8 @@ impl Mirror {
     ];
 
     /// reflection pole with norm 2√2
-    pub fn vec(&self) -> Point {
-        match self {
+    pub fn point(&self) -> Point {
+        Point(match self {
             Mirror::C => matrix![2, -2, 0, 0, 0, 0, 0, 0],
             Mirror::M => matrix![0, 2, -2, 0, 0, 0, 0, 0],
             Mirror::A3 => matrix![0, 0, 2, -2, 0, 0, 0, 0],
@@ -44,11 +43,11 @@ impl Mirror {
             Mirror::A0 => matrix![0, 0, 0, 0, 0, 2, -2, 0],
             Mirror::B1 => matrix![2, 2, 0, 0, 0, 0, 0, 0],
             Mirror::B0 => matrix![1, 1, 1, 1, 1, 1, 1, 1],
-        }
+        })
     }
 
     pub fn mat(&self) -> E8 {
-        E8(SMatrix::identity() * 4 - self.vec().transpose() * self.vec())
+        E8(SMatrix::identity() * 4 - self.point().0.transpose() * self.point().0)
     }
 }
 
@@ -76,7 +75,7 @@ impl Mul<E8> for E8 {
 impl Mul<E8> for Point {
     type Output = Point;
     fn mul(self, other: E8) -> Point {
-        self * other.0 / 4
+        Point(self.0 * other.0 / 4)
     }
 }
 
@@ -104,14 +103,14 @@ impl Ring {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct MirrorSet {
-    a0: Ring,
-    a1: Ring,
-    a2: Ring,
-    a3: Ring,
-    b0: Ring,
-    b1: Ring,
-    c: Ring,
-    m: Ring,
+    pub a0: Ring,
+    pub a1: Ring,
+    pub a2: Ring,
+    pub a3: Ring,
+    pub b0: Ring,
+    pub b1: Ring,
+    pub c: Ring,
+    pub m: Ring,
 }
 
 impl MirrorSet {
@@ -257,7 +256,7 @@ impl MirrorSet {
     }
 
     pub fn vertex(self) -> Point {
-        let cvec: Point = Mirror::ALL
+        let cvec: RowSVector<i8, 8> = Mirror::ALL
             .map(|mirror| if self.has(mirror) { 1 } else { 0 })
             .into();
         let cmat = matrix![
@@ -270,7 +269,7 @@ impl MirrorSet {
             1, -1, -1, -1, -1, -1, -1, 5;
             0, 0, -2, -2, -2, -2, -2, 10
         ];
-        cvec * cmat
+        Point(cvec * cmat)
     }
 }
 
@@ -336,15 +335,15 @@ mod tests {
                 .iter()
                 .find(|mirror| mirrors.has(**mirror))
                 .unwrap()
-                .vec()
-                .dot(&vertex);
+                .point()
+                .dot(vertex);
             assert_ne!(dot, 0);
             assert!(
-                Mirror::ALL.iter().all(|mirror| mirror.vec().dot(&vertex)
+                Mirror::ALL.iter().all(|mirror| mirror.point().dot(vertex)
                     == if mirrors.has(*mirror) { dot } else { 0 }),
                 "{:08b}, {:?}",
                 bits,
-                Mirror::ALL.map(|mirror| mirror.vec().dot(&vertex)),
+                Mirror::ALL.map(|mirror| mirror.point().dot(vertex)),
             )
         }
     }
