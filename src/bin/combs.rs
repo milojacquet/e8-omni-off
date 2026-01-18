@@ -5,7 +5,11 @@ fn main() {
     let combs: Vec<Vec<Vec<u32>>> = (0..=8)
         .map(|n| {
             (0..=n)
-                .map(|k| (0u32..=(1 << n) - 1).map(|i| i.count_ones()).collect())
+                .map(|k| {
+                    (0u32..=(1 << n) - 1)
+                        .filter(|i| i.count_ones() == k)
+                        .collect()
+                })
                 .collect()
         })
         .collect();

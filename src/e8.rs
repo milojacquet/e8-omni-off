@@ -1,6 +1,7 @@
 use crate::e8::Ring::XX;
 use crate::e8::Ring::oo;
 use crate::point::Point;
+use crate::point::Vec8;
 use nalgebra::RowSVector;
 use nalgebra::SMatrix;
 use nalgebra::matrix;
@@ -33,8 +34,8 @@ impl Mirror {
     ];
 
     /// reflection pole with norm 2√2
-    pub fn point(&self) -> Point {
-        Point(match self {
+    pub fn pole(&self) -> Vec8 {
+        match self {
             Mirror::C => matrix![2, -2, 0, 0, 0, 0, 0, 0],
             Mirror::M => matrix![0, 2, -2, 0, 0, 0, 0, 0],
             Mirror::A3 => matrix![0, 0, 2, -2, 0, 0, 0, 0],
@@ -43,17 +44,17 @@ impl Mirror {
             Mirror::A0 => matrix![0, 0, 0, 0, 0, 2, -2, 0],
             Mirror::B1 => matrix![2, 2, 0, 0, 0, 0, 0, 0],
             Mirror::B0 => matrix![1, 1, 1, 1, 1, 1, 1, 1],
-        })
+        }
     }
 
     pub fn mat(&self) -> E8 {
-        E8(SMatrix::identity() * 4 - self.point().0.transpose() * self.point().0)
+        E8(SMatrix::identity() * 4 - self.pole().transpose() * self.pole())
     }
 }
 
 /// Matrix in E8 group times 4
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct E8(SMatrix<i8, 8, 8>);
+pub struct E8(SMatrix<i16, 8, 8>);
 
 impl E8 {
     pub fn identity() -> Self {
@@ -75,7 +76,7 @@ impl Mul<E8> for E8 {
 impl Mul<E8> for Point {
     type Output = Point;
     fn mul(self, other: E8) -> Point {
-        Point(self.0 * other.0 / 4)
+        Point::new(self.vec() * other.0 / 4)
     }
 }
 
@@ -256,7 +257,7 @@ impl MirrorSet {
     }
 
     pub fn vertex(self) -> Point {
-        let cvec: RowSVector<i8, 8> = Mirror::ALL
+        let cvec: Vec8 = Mirror::ALL
             .map(|mirror| if self.has(mirror) { 1 } else { 0 })
             .into();
         let cmat = matrix![
@@ -269,7 +270,7 @@ impl MirrorSet {
             1, -1, -1, -1, -1, -1, -1, 5;
             0, 0, -2, -2, -2, -2, -2, 10
         ];
-        Point(cvec * cmat)
+        Point::new(cvec * cmat)
     }
 }
 
@@ -330,20 +331,20 @@ mod tests {
     fn all_vertex_dots_equal() {
         for bits in 1..=255 {
             let mirrors = MirrorSet::from_bits(bits);
-            let vertex = mirrors.vertex();
+            let vertex = mirrors.vertex().vec();
             let dot = Mirror::ALL
                 .iter()
                 .find(|mirror| mirrors.has(**mirror))
                 .unwrap()
-                .point()
-                .dot(vertex);
+                .pole()
+                .dot(&vertex);
             assert_ne!(dot, 0);
             assert!(
-                Mirror::ALL.iter().all(|mirror| mirror.point().dot(vertex)
+                Mirror::ALL.iter().all(|mirror| mirror.pole().dot(&vertex)
                     == if mirrors.has(*mirror) { dot } else { 0 }),
                 "{:08b}, {:?}",
                 bits,
-                Mirror::ALL.map(|mirror| mirror.point().dot(vertex)),
+                Mirror::ALL.map(|mirror| mirror.pole().dot(&vertex)),
             )
         }
     }
