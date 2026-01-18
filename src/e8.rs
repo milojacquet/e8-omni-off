@@ -2,13 +2,14 @@ use crate::e8::Ring::XX;
 use crate::e8::Ring::oo;
 use crate::point::Point;
 use crate::point::Vec8;
-use fxhash::FxHashSet;
+use fxhash::FxHashMap;
 use fxhash::FxHasher;
 use nalgebra::RowSVector;
 use nalgebra::SMatrix;
 use nalgebra::matrix;
 use rand::distr::StandardUniform;
 use rand::prelude::*;
+use std::collections::HashMap;
 use std::collections::HashSet;
 use std::ops::Mul;
 use std::str::FromStr;
@@ -332,16 +333,16 @@ impl MirrorSet {
         Point::new(cvec * cmat)
     }
 
-    pub fn vertex_orbits(self) -> FxHashSet<Point> {
+    pub fn vertex_orbits(self) -> FxHashMap<Point, E8> {
         let total_vertices = E8_SIZE / self.complement().order();
         let vertex = self.vertex().representative();
         let mut seen_vertices = 0;
-        let mut orbits = HashSet::from_iter([]);
+        let mut orbits = HashMap::from_iter([]);
         let mut rng = rand::rng();
         loop {
             let e8: E8 = rng.random();
             let v = (vertex * e8).representative();
-            if orbits.insert(v) {
+            if orbits.insert(v, e8).is_none() {
                 seen_vertices += v.orbit_size();
             }
             if seen_vertices == total_vertices {

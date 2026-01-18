@@ -49,7 +49,7 @@ fn main() {
         println!("{:?}", arr)
     } else if cli.vertices {
         let vertices = mirror_set.vertex_orbits();
-        for vertex in vertices {
+        for vertex in vertices.keys() {
             let mut arr: Vec<_> = vertex.rep.iter().copied().collect();
             arr[0] *= vertex.sign;
             println!("{:?}", arr)
