@@ -2,12 +2,18 @@ use crate::e8::Ring::XX;
 use crate::e8::Ring::oo;
 use crate::point::Point;
 use crate::point::Vec8;
+use fxhash::FxHashSet;
+use fxhash::FxHasher;
 use nalgebra::RowSVector;
 use nalgebra::SMatrix;
 use nalgebra::matrix;
 use rand::distr::StandardUniform;
 use rand::prelude::*;
+use std::collections::HashSet;
 use std::ops::Mul;
+use std::str::FromStr;
+
+const E8_SIZE: u64 = 696729600;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Mirror {
@@ -49,6 +55,23 @@ impl Mirror {
 
     pub fn mat(&self) -> E8 {
         E8(SMatrix::identity() * 4 - self.pole().transpose() * self.pole())
+    }
+}
+
+impl FromStr for Mirror {
+    type Err = ();
+    fn from_str(st: &str) -> Result<Self, ()> {
+        match st {
+            "A0" => Ok(Mirror::A0),
+            "A1" => Ok(Mirror::A1),
+            "A2" => Ok(Mirror::A2),
+            "A3" => Ok(Mirror::A3),
+            "B0" => Ok(Mirror::B0),
+            "B1" => Ok(Mirror::B1),
+            "C" => Ok(Mirror::C),
+            "M" => Ok(Mirror::M),
+            _ => Err(()),
+        }
     }
 }
 
@@ -100,6 +123,13 @@ impl Ring {
             XX => 1,
         }
     }
+
+    pub fn toggle(self) -> Self {
+        match self {
+            oo => XX,
+            XX => oo,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -141,6 +171,19 @@ impl MirrorSet {
         }
     }
 
+    pub fn complement(self) -> Self {
+        Self {
+            a0: self.a0.toggle(),
+            a1: self.a1.toggle(),
+            a2: self.a2.toggle(),
+            a3: self.a3.toggle(),
+            b0: self.b0.toggle(),
+            b1: self.b1.toggle(),
+            c: self.c.toggle(),
+            m: self.m.toggle(),
+        }
+    }
+
     pub fn has(self, mirror: Mirror) -> bool {
         match mirror {
             Mirror::A0 => self.a0 == XX,
@@ -151,6 +194,19 @@ impl MirrorSet {
             Mirror::B1 => self.b1 == XX,
             Mirror::C => self.c == XX,
             Mirror::M => self.m == XX,
+        }
+    }
+
+    pub fn set(&mut self, mirror: Mirror, val: Ring) {
+        match mirror {
+            Mirror::A0 => self.a0 = val,
+            Mirror::A1 => self.a1 = val,
+            Mirror::A2 => self.a2 = val,
+            Mirror::A3 => self.a3 = val,
+            Mirror::B0 => self.b0 = val,
+            Mirror::B1 => self.b1 = val,
+            Mirror::C => self.c = val,
+            Mirror::M => self.m = val,
         }
     }
 
@@ -248,7 +304,7 @@ impl MirrorSet {
                 [0, 1, 4] => 5040,
                 [1, 1, 4] => 64 * 5040,
                 [0, 2, 4] => 40320,
-                [1, 2, 4] => 696729600,
+                [1, 2, 4] => E8_SIZE,
                 _ => unreachable!(),
             };
         }
@@ -271,6 +327,25 @@ impl MirrorSet {
             0, 0, -2, -2, -2, -2, -2, 10
         ];
         Point::new(cvec * cmat)
+    }
+
+    pub fn vertex_orbits(self) -> FxHashSet<Point> {
+        let total_vertices = E8_SIZE / self.complement().order();
+        let vertex = self.vertex().representative();
+        let mut seen_vertices = vertex.orbit_size();
+        let mut orbits = HashSet::from_iter([vertex]);
+        let mut rng = rand::rng();
+        loop {
+            let e8: E8 = rng.random();
+            let v = (vertex * e8).representative();
+            if orbits.insert(v) {
+                seen_vertices += v.orbit_size();
+            }
+            if seen_vertices == total_vertices {
+                break;
+            }
+        }
+        orbits
     }
 }
 

@@ -249,6 +249,14 @@ impl Point {
 
         index
     }
+
+    pub fn representative(self) -> Self {
+        Self {
+            rep: self.rep,
+            sign: self.sign,
+            d8: D8::identity(),
+        }
+    }
 }
 
 impl Mul<D8> for Point {
