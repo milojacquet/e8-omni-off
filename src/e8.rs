@@ -2,6 +2,7 @@ use crate::e8::Ring::XX;
 use crate::e8::Ring::oo;
 use crate::point::Point;
 use crate::point::Vec8;
+use bitflags::bitflags;
 use fxhash::FxHashMap;
 use fxhash::FxHasher;
 use nalgebra::RowSVector;
@@ -106,7 +107,7 @@ impl Mul<E8> for Point {
 
 impl Distribution<E8> for StandardUniform {
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> E8 {
-        MirrorSet::e8().sample(rng)
+        MirrorSet::all().sample(rng)
     }
 }
 
@@ -133,112 +134,89 @@ impl Ring {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct MirrorSet {
-    pub a0: Ring,
-    pub a1: Ring,
-    pub a2: Ring,
-    pub a3: Ring,
-    pub b0: Ring,
-    pub b1: Ring,
-    pub c: Ring,
-    pub m: Ring,
+bitflags! {
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    pub struct MirrorSet: u8 {
+        const A0 = 1 << 0;
+        const A1 = 1 << 1;
+        const A2 = 1 << 2;
+        const A3 = 1 << 3;
+        const B0 = 1 << 4;
+        const B1 = 1 << 5;
+        const C = 1 << 6;
+        const M = 1 << 7;
+    }
 }
 
 impl MirrorSet {
-    pub fn empty() -> Self {
-        Self {
-            a0: oo,
-            a1: oo,
-            a2: oo,
-            a3: oo,
-            b0: oo,
-            b1: oo,
-            c: oo,
-            m: oo,
-        }
+    pub fn a0(self) -> Ring {
+        if self.contains(Self::A0) { XX } else { oo }
+    }
+    pub fn a1(self) -> Ring {
+        if self.contains(Self::A1) { XX } else { oo }
+    }
+    pub fn a2(self) -> Ring {
+        if self.contains(Self::A2) { XX } else { oo }
+    }
+    pub fn a3(self) -> Ring {
+        if self.contains(Self::A3) { XX } else { oo }
+    }
+    pub fn b0(self) -> Ring {
+        if self.contains(Self::B0) { XX } else { oo }
+    }
+    pub fn b1(self) -> Ring {
+        if self.contains(Self::B1) { XX } else { oo }
+    }
+    pub fn c(self) -> Ring {
+        if self.contains(Self::C) { XX } else { oo }
+    }
+    pub fn m(self) -> Ring {
+        if self.contains(Self::M) { XX } else { oo }
     }
 
-    pub fn e8() -> Self {
-        Self {
-            a0: XX,
-            a1: XX,
-            a2: XX,
-            a3: XX,
-            b0: XX,
-            b1: XX,
-            c: XX,
-            m: XX,
-        }
-    }
-
-    pub fn complement(self) -> Self {
-        Self {
-            a0: self.a0.toggle(),
-            a1: self.a1.toggle(),
-            a2: self.a2.toggle(),
-            a3: self.a3.toggle(),
-            b0: self.b0.toggle(),
-            b1: self.b1.toggle(),
-            c: self.c.toggle(),
-            m: self.m.toggle(),
-        }
-    }
-
-    pub fn has(self, mirror: Mirror) -> bool {
+    pub fn mirror(mirror: Mirror) -> Self {
         match mirror {
-            Mirror::A0 => self.a0 == XX,
-            Mirror::A1 => self.a1 == XX,
-            Mirror::A2 => self.a2 == XX,
-            Mirror::A3 => self.a3 == XX,
-            Mirror::B0 => self.b0 == XX,
-            Mirror::B1 => self.b1 == XX,
-            Mirror::C => self.c == XX,
-            Mirror::M => self.m == XX,
+            Mirror::A0 => Self::A0,
+            Mirror::A1 => Self::A1,
+            Mirror::A2 => Self::A2,
+            Mirror::A3 => Self::A3,
+            Mirror::B0 => Self::B0,
+            Mirror::B1 => Self::B1,
+            Mirror::C => Self::C,
+            Mirror::M => Self::M,
         }
     }
 
-    pub fn set(&mut self, mirror: Mirror, val: Ring) {
+    pub fn has_mirror(self, mirror: Mirror) -> bool {
         match mirror {
-            Mirror::A0 => self.a0 = val,
-            Mirror::A1 => self.a1 = val,
-            Mirror::A2 => self.a2 = val,
-            Mirror::A3 => self.a3 = val,
-            Mirror::B0 => self.b0 = val,
-            Mirror::B1 => self.b1 = val,
-            Mirror::C => self.c = val,
-            Mirror::M => self.m = val,
+            Mirror::A0 => self.a0() == XX,
+            Mirror::A1 => self.a1() == XX,
+            Mirror::A2 => self.a2() == XX,
+            Mirror::A3 => self.a3() == XX,
+            Mirror::B0 => self.b0() == XX,
+            Mirror::B1 => self.b1() == XX,
+            Mirror::C => self.c() == XX,
+            Mirror::M => self.m() == XX,
         }
     }
 
-    pub fn size(self) -> u8 {
-        self.a0.size()
-            + self.a1.size()
-            + self.a2.size()
-            + self.a3.size()
-            + self.b0.size()
-            + self.b1.size()
-            + self.c.size()
-            + self.m.size()
-    }
-
-    pub fn from_bits(bits: u8) -> Self {
-        Self {
-            a0: if (bits >> 7) & 1 == 0 { oo } else { XX },
-            a1: if (bits >> 6) & 1 == 0 { oo } else { XX },
-            a2: if (bits >> 5) & 1 == 0 { oo } else { XX },
-            a3: if (bits >> 4) & 1 == 0 { oo } else { XX },
-            b0: if (bits >> 3) & 1 == 0 { oo } else { XX },
-            b1: if (bits >> 2) & 1 == 0 { oo } else { XX },
-            c: if (bits >> 1) & 1 == 0 { oo } else { XX },
-            m: if (bits >> 0) & 1 == 0 { oo } else { XX },
+    pub fn set_mirror(&mut self, mirror: Mirror, val: Ring) {
+        match mirror {
+            Mirror::A0 => self.set(Self::A0, val == XX),
+            Mirror::A1 => self.set(Self::A1, val == XX),
+            Mirror::A2 => self.set(Self::A2, val == XX),
+            Mirror::A3 => self.set(Self::A3, val == XX),
+            Mirror::B0 => self.set(Self::B0, val == XX),
+            Mirror::B1 => self.set(Self::B1, val == XX),
+            Mirror::C => self.set(Self::C, val == XX),
+            Mirror::M => self.set(Self::M, val == XX),
         }
     }
 
     pub fn order(self) -> u64 {
         let mut order = 1;
 
-        let (o, len_a) = match (self.a0, self.a1, self.a2, self.a3, self.m) {
+        let (o, len_a) = match (self.a0(), self.a1(), self.a2(), self.a3(), self.m()) {
             (oo, oo, oo, oo, _) => (1, 0),
             (XX, oo, oo, oo, _) => (2, 0),
             (oo, XX, oo, oo, _) => (2, 0),
@@ -266,7 +244,7 @@ impl MirrorSet {
         };
         order *= o;
 
-        let (o, len_b) = match (self.b0, self.b1, self.m) {
+        let (o, len_b) = match (self.b0(), self.b1(), self.m()) {
             (oo, oo, oo) => (1, 0),
             (XX, oo, oo) => (2, 0),
             (oo, XX, oo) => (2, 1),
@@ -278,7 +256,7 @@ impl MirrorSet {
         };
         order *= o;
 
-        let (o, len_c) = match (self.c, self.m) {
+        let (o, len_c) = match (self.c(), self.m()) {
             (oo, oo) => (1, 0),
             (XX, oo) => (2, 0),
             (oo, XX) => (1, 0),
@@ -288,7 +266,7 @@ impl MirrorSet {
 
         let mut lens = [len_a, len_b, len_c];
         lens.sort();
-        if self.m == XX {
+        if self.m() == XX {
             order *= match lens {
                 [0, 0, 0] => 2,
                 [0, 0, 1] => 6,
@@ -318,7 +296,7 @@ impl MirrorSet {
 
     pub fn vertex(self) -> Point {
         let cvec: Vec8 = Mirror::ALL
-            .map(|mirror| if self.has(mirror) { 1 } else { 0 })
+            .map(|mirror| if self.has_mirror(mirror) { 1 } else { 0 })
             .into();
         let cmat = matrix![
             0, 0, 0, 0, 0, 0, -2, 2;
@@ -356,7 +334,7 @@ impl MirrorSet {
 impl Distribution<E8> for MirrorSet {
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> E8 {
         let mut gens = Mirror::ALL.map(|mirror| {
-            if self.has(mirror) {
+            if self.has_mirror(mirror) {
                 mirror.mat()
             } else {
                 E8::identity()
@@ -390,8 +368,8 @@ mod tests {
         for bits_out in 0..=255 {
             for bits_in in 0..=255 {
                 if bits_in & bits_out == bits_in {
-                    let size_out = MirrorSet::from_bits(bits_out).order();
-                    let size_in = MirrorSet::from_bits(bits_in).order();
+                    let size_out = MirrorSet::from_bits(bits_out).unwrap().order();
+                    let size_in = MirrorSet::from_bits(bits_in).unwrap().order();
                     assert_eq!(
                         size_out % size_in,
                         0,
@@ -409,18 +387,18 @@ mod tests {
     #[test]
     fn all_vertex_dots_equal() {
         for bits in 1..=255 {
-            let mirrors = MirrorSet::from_bits(bits);
+            let mirrors = MirrorSet::from_bits(bits).unwrap();
             let vertex = mirrors.vertex().vec();
             let dot = Mirror::ALL
                 .iter()
-                .find(|mirror| mirrors.has(**mirror))
+                .find(|mirror| mirrors.has_mirror(**mirror))
                 .unwrap()
                 .pole()
                 .dot(&vertex);
             assert_ne!(dot, 0);
             assert!(
                 Mirror::ALL.iter().all(|mirror| mirror.pole().dot(&vertex)
-                    == if mirrors.has(*mirror) { dot } else { 0 }),
+                    == if mirrors.has_mirror(*mirror) { dot } else { 0 }),
                 "{:08b}, {:?}",
                 bits,
                 Mirror::ALL.map(|mirror| mirror.pole().dot(&vertex)),

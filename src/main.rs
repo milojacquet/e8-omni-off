@@ -13,6 +13,7 @@ use std::path::PathBuf;
 
 mod combs;
 mod e8;
+mod off;
 mod point;
 
 #[derive(Parser)]
@@ -39,7 +40,7 @@ fn main() {
     let mut mirror_set = MirrorSet::empty();
     for mirror in cli.mirrors {
         let mirror = mirror.parse().unwrap();
-        mirror_set.set(mirror, XX);
+        mirror_set.set_mirror(mirror, XX);
     }
 
     if cli.single_vertex {
