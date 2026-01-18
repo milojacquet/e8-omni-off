@@ -7,6 +7,7 @@ use rand::distr::StandardUniform;
 use rand::prelude::*;
 use std::ops::Mul;
 
+mod combs;
 mod e8;
 mod point;
 

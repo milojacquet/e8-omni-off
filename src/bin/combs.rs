@@ -14,8 +14,29 @@ fn main() {
         })
         .collect();
 
-    let combs_str = todo!();
-
-    let mut file = File::create("../combs.rs").unwrap();
-    write!(file, "const ").unwrap();
+    let mut file = File::create(concat!(env!("CARGO_MANIFEST_DIR"), "/src/combs.rs")).unwrap();
+    write!(
+        file,
+        "use std::sync::LazyLock;\n#[rustfmt::skip]\npub const COMBS:LazyLock<[Vec<Vec<u8>>;9]>=LazyLock::new(|| [{}]);\n",
+        combs
+            .iter()
+            .map(|combs| format!(
+                "vec![{}]",
+                combs
+                    .iter()
+                    .map(|combs| format!(
+                        "vec![{}]",
+                        combs
+                            .iter()
+                            .map(|comb| comb.to_string())
+                            .collect::<Vec<_>>()
+                            .join(",")
+                    ))
+                    .collect::<Vec<_>>()
+                    .join(",")
+            ))
+            .collect::<Vec<_>>()
+            .join(",")
+    )
+    .unwrap();
 }

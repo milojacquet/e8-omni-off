@@ -1,3 +1,4 @@
+use crate::combs::COMBS;
 use nalgebra::RowSVector;
 use std::ops::Mul;
 
@@ -68,9 +69,30 @@ impl Mul for D8 {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Point {
-    pub sorted: Vec8,
+    pub rep: Vec8,
     pub sign: i16,
     pub d8: D8,
+}
+
+pub fn d8_orbit_size(rep: Vec8) -> u32 {
+    let mut size = 1;
+    let mut group = 1;
+    for (i, (&x, y)) in rep
+        .iter()
+        .zip(rep.iter().skip(1).map(Some).chain(std::iter::once(None)))
+        .enumerate()
+    {
+        if Some(&x) == y {
+            group += 1;
+        } else {
+            size *= COMBS[i + 1][group].len() as u32;
+            group = 1;
+        }
+        if x != 0 && i != 0 {
+            size *= 2;
+        }
+    }
+    size
 }
 
 impl Point {
@@ -87,18 +109,20 @@ impl Point {
             (vec[7].abs(), AxSign::new(7, vec[7].signum())),
         ]; // why won't they stabilize zip
         deco.sort();
-        let sorted = deco.map(|(x, _)| x).into();
+        let rep = deco.map(|(x, _)| x).into();
         let mut d8 = D8(deco.map(|(_, p)| p));
-        d8.0[0].flip_sign();
+        if sign == -1 {
+            d8.0[0].flip_sign();
+        }
         Self {
-            sorted,
+            rep,
             sign,
             d8: d8.inv(),
         }
     }
 
     pub fn vec(self) -> Vec8 {
-        let mut rep = self.sorted;
+        let mut rep = self.rep;
         rep[0] *= self.sign;
         rep * self.d8
     }
@@ -106,22 +130,13 @@ impl Point {
     pub fn dot(self, other: Self) -> i16 {
         self.vec().dot(&other.vec())
     }
-
-    // pub fn d8_orbit(self) -> D8Orbit {
-    //     let mut coords = self.0.abs();
-    //     coords.data.0.sort();
-    //     D8Orbit {
-    //         coords,
-    //         sign: self.0.iter().fold(1, |x, y| x * y),
-    //     }
-    // }
 }
 
 impl Mul<D8> for Point {
     type Output = Self;
     fn mul(self, d8: D8) -> Self {
         Self {
-            sorted: self.sorted,
+            rep: self.rep,
             sign: self.sign,
             d8: self.d8 * d8,
         }
@@ -143,9 +158,27 @@ mod tests {
     }
 
     #[test]
-    fn d8_roundtrip() {
+    fn d8_roundtrip_1() {
         let v: Vec8 = [10, 4, 6, 2, -2, 8, 6, 2].into();
         let point = Point::new(v);
         assert_eq!(point.vec(), v, "{:?}", point);
+    }
+
+    #[test]
+    fn d8_roundtrip_2() {
+        let v: Vec8 = [1, -1, -1, -1, -1, -1, -1, 5].into();
+        let point = Point::new(v);
+        assert_eq!(point.vec(), v, "{:?}", point);
+    }
+
+    #[test]
+    fn orbit_size() {
+        assert_eq!(d8_orbit_size([1, 2, 3, 4, 5, 6, 7, 8].into()), 128 * 40320);
+        assert_eq!(d8_orbit_size([0, 2, 3, 4, 5, 6, 7, 8].into()), 128 * 40320);
+        assert_eq!(
+            d8_orbit_size([0, 0, 3, 4, 5, 6, 7, 8].into()),
+            64 * 40320 / 2
+        );
+        assert_eq!(d8_orbit_size([1, 1, 1, 1, 1, 1, 1, 1].into()), 128);
     }
 }
