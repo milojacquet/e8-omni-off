@@ -1,5 +1,6 @@
 use crate::combs::COMBS;
 use nalgebra::RowSVector;
+use std::iter::once;
 use std::ops::Mul;
 
 pub type Vec8 = RowSVector<i16, 8>;
@@ -74,18 +75,18 @@ pub struct Point {
     pub d8: D8,
 }
 
-pub fn d8_orbit_size(rep: Vec8) -> u32 {
+pub fn d8_orbit_size(rep: Vec8) -> u64 {
     let mut size = 1;
     let mut group = 1;
     for (i, (&x, y)) in rep
         .iter()
-        .zip(rep.iter().skip(1).map(Some).chain(std::iter::once(None)))
+        .zip(rep.iter().skip(1).map(Some).chain(once(None)))
         .enumerate()
     {
         if Some(&x) == y {
             group += 1;
         } else {
-            size *= COMBS[i + 1][group].len() as u32;
+            size *= COMBS[i + 1][group].len() as u64;
             group = 1;
         }
         if x != 0 && i != 0 {
@@ -93,6 +94,80 @@ pub fn d8_orbit_size(rep: Vec8) -> u32 {
         }
     }
     size
+}
+
+pub fn d8_orbit_iter(rep: Vec8, sign: i16) -> impl Iterator<Item = Point> {
+    let mut bases = Vec::new();
+    let mut group = 1;
+    let mut signs = 0;
+    for (i, (&x, y)) in rep
+        .iter()
+        .zip(rep.iter().skip(1).map(Some).chain(once(None)))
+        .enumerate()
+    {
+        if Some(&x) == y {
+            group += 1;
+        } else {
+            bases.push((i + 1, group, COMBS[i + 1][group].len() as u64));
+            group = 1;
+        }
+        if x != 0 && i != 0 {
+            signs += 1;
+        }
+    }
+    bases.reverse();
+    let bases = bases;
+
+    let perms = bases.iter().map(|(_, _, p)| p).product();
+
+    (0..perms)
+        .map(move |mut i| {
+            let mut d8 = [None; 8];
+            for (n, k, p) in &bases {
+                let comb_num = COMBS[*n][*k][(i % p) as usize];
+                i /= p;
+
+                let none_iter = d8.iter_mut().filter(|p| p.is_none());
+                for (j, (_, p)) in none_iter
+                    .enumerate()
+                    .filter(|(b, _)| (comb_num >> (n - 1 - b)) & 1 == 1)
+                    .enumerate()
+                {
+                    *p = Some(AxSign::new(n - k + j, 1)) // placeholder sign
+                }
+            }
+
+            let d8 = d8.map(Option::unwrap);
+            let zero_ind = d8.iter().position(|p| p.ax() == 0).unwrap();
+
+            (0u8..1 << signs).map(move |s| {
+                let mut d8 = d8;
+                for p in d8.iter_mut() {
+                    if (s >> (7 - p.ax())) & 1 == 1
+                        || (sign != 0 && p.ax() == 0 && (s.count_ones() % 2 == 0) != (sign == 1))
+                    {
+                        p.flip_sign();
+                    }
+                }
+                Point {
+                    rep,
+                    sign,
+                    d8: D8(d8),
+                }
+            })
+        })
+        .flatten()
+}
+
+pub fn opt_bits_to_num(bits: [Option<bool>; 8]) -> u8 {
+    let mut num = 0;
+    for bit in bits {
+        if let Some(bit) = bit {
+            num <<= 1;
+            num |= if bit { 1 } else { 0 };
+        }
+    }
+    num
 }
 
 impl Point {
@@ -108,7 +183,7 @@ impl Point {
             (vec[6].abs(), AxSign::new(6, vec[6].signum())),
             (vec[7].abs(), AxSign::new(7, vec[7].signum())),
         ]; // why won't they stabilize zip
-        deco.sort();
+        deco.sort_by_key(|(x, _)| *x);
         let rep = deco.map(|(x, _)| x).into();
         let mut d8 = D8(deco.map(|(_, p)| p));
         if sign == -1 {
@@ -129,6 +204,50 @@ impl Point {
 
     pub fn dot(self, other: Self) -> i16 {
         self.vec().dot(&other.vec())
+    }
+
+    pub fn orbit_size(self) -> u64 {
+        d8_orbit_size(self.rep)
+    }
+
+    pub fn orbit_index(self) -> u64 {
+        let mut index = 0;
+
+        let mut group = 1;
+        let mut signs = 0;
+        for (i, (&x, y)) in self
+            .rep
+            .iter()
+            .zip(self.rep.iter().skip(1).map(Some).chain(once(None)))
+            .enumerate()
+        {
+            if Some(&x) == y {
+                group += 1;
+            } else {
+                let comb_num = opt_bits_to_num(self.d8.0.map(|p| {
+                    if p.ax() > i {
+                        None
+                    } else {
+                        Some(p.ax() + group > i)
+                    }
+                }));
+                index *= COMBS[i + 1][group].len() as u64;
+                index += COMBS[i + 1][group].binary_search(&comb_num).unwrap() as u64;
+                group = 1;
+            }
+            if x != 0 && i != 0 {
+                signs += 1;
+            }
+        }
+
+        index <<= signs;
+        for p in self.d8.0 {
+            if p.ax() != 0 && self.rep[p.ax()] != 0 && p.sign() == -1 {
+                index |= 1 << (7 - p.ax())
+            }
+        }
+
+        index
     }
 }
 
@@ -180,5 +299,36 @@ mod tests {
             64 * 40320 / 2
         );
         assert_eq!(d8_orbit_size([1, 1, 1, 1, 1, 1, 1, 1].into()), 128);
+    }
+
+    fn d8_orbit_index_consistent(rep: [i16; 8]) {
+        for (i, point) in d8_orbit_iter(rep.into(), 1).enumerate() {
+            if i % 100000 == 0 {
+                println!("{i}")
+            }
+            assert_eq!(point.orbit_index(), i as u64, "{}", point.vec());
+        }
+    }
+
+    #[ignore = "very long"]
+    #[test]
+    fn d8_orbit_index_consistent_12345678() {
+        d8_orbit_index_consistent([1, 2, 3, 4, 5, 6, 7, 8])
+    }
+
+    #[ignore = "very long"]
+    #[test]
+    fn d8_orbit_index_consistent_01234567() {
+        d8_orbit_index_consistent([0, 1, 2, 3, 4, 5, 6, 7])
+    }
+
+    #[test]
+    fn d8_orbit_index_consistent_12233344() {
+        d8_orbit_index_consistent([1, 2, 2, 3, 3, 3, 4, 4])
+    }
+
+    #[test]
+    fn d8_orbit_index_consistent_00122333() {
+        d8_orbit_index_consistent([0, 0, 1, 2, 2, 3, 3, 3])
     }
 }

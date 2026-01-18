@@ -178,7 +178,7 @@ impl MirrorSet {
         }
     }
 
-    pub fn order(self) -> u32 {
+    pub fn order(self) -> u64 {
         let mut order = 1;
 
         let (o, len_a) = match (self.a0, self.a1, self.a2, self.a3, self.m) {
