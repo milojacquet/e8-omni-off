@@ -48,7 +48,7 @@ impl Mirror {
             Mirror::A2 => matrix![0, 0, 0, 2, -2, 0, 0, 0],
             Mirror::A1 => matrix![0, 0, 0, 0, 2, -2, 0, 0],
             Mirror::A0 => matrix![0, 0, 0, 0, 0, 2, -2, 0],
-            Mirror::B1 => matrix![2, 2, 0, 0, 0, 0, 0, 0],
+            Mirror::B1 => matrix![-2, -2, 0, 0, 0, 0, 0, 0],
             Mirror::B0 => matrix![1, 1, 1, 1, 1, 1, 1, 1],
         }
     }
@@ -277,10 +277,13 @@ impl MirrorSet {
         };
         order *= o;
 
-        let len_c = match self.c {
-            oo => 0,
-            XX => 1,
+        let (o, len_c) = match (self.c, self.m) {
+            (oo, oo) => (1, 0),
+            (XX, oo) => (2, 0),
+            (oo, XX) => (1, 0),
+            (XX, XX) => (1, 1),
         };
+        order *= o;
 
         let mut lens = [len_a, len_b, len_c];
         lens.sort();
@@ -322,7 +325,7 @@ impl MirrorSet {
             0, 0, 0, 0, -2, -2, -2, 6;
             0, 0, 0, -2, -2, -2, -2, 8;
             0, 0, 0, 0, 0, 0, 0, 4;
-            1, 1, 1, 1, 1, 1, 1, -7;
+            -1, -1, -1, -1, -1, -1, -1, 7;
             1, -1, -1, -1, -1, -1, -1, 5;
             0, 0, -2, -2, -2, -2, -2, 10
         ];
@@ -332,8 +335,8 @@ impl MirrorSet {
     pub fn vertex_orbits(self) -> FxHashSet<Point> {
         let total_vertices = E8_SIZE / self.complement().order();
         let vertex = self.vertex().representative();
-        let mut seen_vertices = vertex.orbit_size();
-        let mut orbits = HashSet::from_iter([vertex]);
+        let mut seen_vertices = 0;
+        let mut orbits = HashSet::from_iter([]);
         let mut rng = rand::rng();
         loop {
             let e8: E8 = rng.random();
