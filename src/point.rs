@@ -154,10 +154,7 @@ impl Orbit {
                 (0u8..1 << signs).map(move |s| {
                     let mut d8 = d8;
                     for p in d8.iter_mut() {
-                        if (s >> (7 - p.ax())) & 1 == 1
-                            || (self.sign != 0
-                                && p.ax() == 0
-                                && (s.count_ones() % 2 == 0) != (self.sign == 1))
+                        if (s >> (7 - p.ax())) & 1 == 1 || (p.ax() == 0 && s.count_ones() % 2 != 0)
                         {
                             p.flip_sign();
                         }

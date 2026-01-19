@@ -161,91 +161,11 @@ impl MirrorSet {
                 ]
             };
 
-            assert_eq!(vertices[0].dot(vertices[1]), 4);
-            assert_eq!(vertices[1].dot(vertices[2]), 4);
-            assert_eq!(vertices[2].dot(vertices[0]), 4);
-
             // already did this once, is that ok
             for (_point, (e8, d8)) in
                 PointSet::new(self.face_center(face_type).vertex_orbits().into_iter()).iter()
             {
                 write!(writer, "{}", vertices.len())?;
-
-                write!(writer, "{:?}", vertices[0] * e8 * d8)?;
-                write!(writer, "{:?}", vertices[1] * e8 * d8)?;
-                write!(writer, "{:?}", vertices[2] * e8 * d8)?;
-                assert_eq!((vertices[0] * e8 * d8).dot(vertices[1] * e8 * d8), 4);
-                assert_eq!((vertices[1] * e8 * d8).dot(vertices[2] * e8 * d8), 4);
-                assert_eq!((vertices[2] * e8 * d8).dot(vertices[0] * e8 * d8), 4);
-                assert_eq!(
-                    point_sets[0]
-                        .iter()
-                        .nth(point_sets[0].index(vertices[0] * e8 * d8) as usize)
-                        .unwrap()
-                        .0,
-                    vertices[0] * e8 * d8
-                );
-                assert_eq!(
-                    point_sets[0]
-                        .iter()
-                        .nth(point_sets[0].index(vertices[1] * e8 * d8) as usize)
-                        .unwrap()
-                        .0,
-                    vertices[1] * e8 * d8
-                );
-                assert_eq!(
-                    point_sets[0]
-                        .iter()
-                        .nth(point_sets[0].index(vertices[2] * e8 * d8) as usize)
-                        .unwrap()
-                        .0,
-                    vertices[2] * e8 * d8
-                );
-                assert_eq!(
-                    point_sets[0]
-                        .iter()
-                        .nth(point_sets[0].index(vertices[0] * e8 * d8) as usize)
-                        .unwrap()
-                        .0
-                        .dot(
-                            point_sets[0]
-                                .iter()
-                                .nth(point_sets[0].index(vertices[1] * e8 * d8) as usize)
-                                .unwrap()
-                                .0
-                        ),
-                    4
-                );
-                assert_eq!(
-                    point_sets[0]
-                        .iter()
-                        .nth(point_sets[0].index(vertices[1] * e8 * d8) as usize)
-                        .unwrap()
-                        .0
-                        .dot(
-                            point_sets[0]
-                                .iter()
-                                .nth(point_sets[0].index(vertices[2] * e8 * d8) as usize)
-                                .unwrap()
-                                .0
-                        ),
-                    4
-                );
-                assert_eq!(
-                    point_sets[0]
-                        .iter()
-                        .nth(point_sets[0].index(vertices[2] * e8 * d8) as usize)
-                        .unwrap()
-                        .0
-                        .dot(
-                            point_sets[0]
-                                .iter()
-                                .nth(point_sets[0].index(vertices[0] * e8 * d8) as usize)
-                                .unwrap()
-                                .0
-                        ),
-                    4
-                );
 
                 for &vertex in &vertices {
                     write!(writer, " {}", point_sets[0].index(vertex * e8 * d8))?;
