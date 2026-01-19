@@ -213,85 +213,122 @@ impl MirrorSet {
         }
     }
 
-    pub fn order(self) -> u64 {
-        let mut order = 1;
+    pub fn components(self) -> Vec<Self> {
+        let mut components = Vec::new();
+        let mut middle = Self::M;
 
-        let (o, len_a) = match (self.a0(), self.a1(), self.a2(), self.a3(), self.m()) {
-            (oo, oo, oo, oo, _) => (1, 0),
-            (XX, oo, oo, oo, _) => (2, 0),
-            (oo, XX, oo, oo, _) => (2, 0),
-            (XX, XX, oo, oo, _) => (6, 0),
-            (oo, oo, XX, oo, _) => (2, 0),
-            (XX, oo, XX, oo, _) => (2 * 2, 0),
-            (oo, XX, XX, oo, _) => (6, 0),
-            (XX, XX, XX, oo, _) => (24, 0),
-            (oo, oo, oo, XX, oo) => (2, 0),
-            (XX, oo, oo, XX, oo) => (2 * 2, 0),
-            (oo, XX, oo, XX, oo) => (2 * 2, 0),
-            (XX, XX, oo, XX, oo) => (6 * 2, 0),
-            (oo, oo, XX, XX, oo) => (6, 0),
-            (XX, oo, XX, XX, oo) => (2 * 6, 0),
-            (oo, XX, XX, XX, oo) => (24, 0),
-            (XX, XX, XX, XX, oo) => (120, 0),
-            (oo, oo, oo, XX, XX) => (1, 1),
-            (XX, oo, oo, XX, XX) => (2, 1),
-            (oo, XX, oo, XX, XX) => (2, 1),
-            (XX, XX, oo, XX, XX) => (6, 1),
-            (oo, oo, XX, XX, XX) => (1, 2),
-            (XX, oo, XX, XX, XX) => (2, 2),
-            (oo, XX, XX, XX, XX) => (1, 3),
-            (XX, XX, XX, XX, XX) => (1, 4),
-        };
-        order *= o;
-
-        let (o, len_b) = match (self.b0(), self.b1(), self.m()) {
-            (oo, oo, oo) => (1, 0),
-            (XX, oo, oo) => (2, 0),
-            (oo, XX, oo) => (2, 1),
-            (XX, XX, oo) => (6, 2),
-            (oo, oo, XX) => (1, 0),
-            (XX, oo, XX) => (2, 0),
-            (oo, XX, XX) => (1, 1),
-            (XX, XX, XX) => (1, 2),
-        };
-        order *= o;
-
-        let (o, len_c) = match (self.c(), self.m()) {
-            (oo, oo) => (1, 0),
-            (XX, oo) => (2, 0),
-            (oo, XX) => (1, 0),
-            (XX, XX) => (1, 1),
-        };
-        order *= o;
-
-        let mut lens = [len_a, len_b, len_c];
-        lens.sort();
-        if self.m() == XX {
-            order *= match lens {
-                [0, 0, 0] => 2,
-                [0, 0, 1] => 6,
-                [0, 1, 1] => 24,
-                [1, 1, 1] => 192,
-                [0, 0, 2] => 24,
-                [0, 1, 2] => 120,
-                [1, 1, 2] => 1920,
-                [0, 2, 2] => 720,
-                [1, 2, 2] => 51840,
-                [0, 0, 3] => 120,
-                [0, 1, 3] => 720,
-                [1, 1, 3] => 32 * 720,
-                [0, 2, 3] => 5040,
-                [1, 2, 3] => 2903040,
-                [0, 0, 4] => 720,
-                [0, 1, 4] => 5040,
-                [1, 1, 4] => 64 * 5040,
-                [0, 2, 4] => 40320,
-                [1, 2, 4] => E8_SIZE,
-                _ => unreachable!(),
+        {
+            let (comps, mid) = match (self.a0(), self.a1(), self.a2(), self.a3(), self.m()) {
+                (oo, oo, oo, oo, _) => (vec![], Self::empty()),
+                (XX, oo, oo, oo, _) => (vec![Self::A0], Self::empty()),
+                (oo, XX, oo, oo, _) => (vec![Self::A1], Self::empty()),
+                (XX, XX, oo, oo, _) => (vec![Self::A0 | Self::A1], Self::empty()),
+                (oo, oo, XX, oo, _) => (vec![Self::A2], Self::empty()),
+                (XX, oo, XX, oo, _) => (vec![Self::A0, Self::A2], Self::empty()),
+                (oo, XX, XX, oo, _) => (vec![Self::A1 | Self::A2], Self::empty()),
+                (XX, XX, XX, oo, _) => (vec![Self::A0 | Self::A1 | Self::A2], Self::empty()),
+                (oo, oo, oo, XX, oo) => (vec![Self::A3], Self::empty()),
+                (XX, oo, oo, XX, oo) => (vec![Self::A0, Self::A3], Self::empty()),
+                (oo, XX, oo, XX, oo) => (vec![Self::A1, Self::A3], Self::empty()),
+                (XX, XX, oo, XX, oo) => (vec![Self::A0 | Self::A1, Self::A3], Self::empty()),
+                (oo, oo, XX, XX, oo) => (vec![Self::A2 | Self::A3], Self::empty()),
+                (XX, oo, XX, XX, oo) => (vec![Self::A0, Self::A2 | Self::A3], Self::empty()),
+                (oo, XX, XX, XX, oo) => (vec![Self::A1 | Self::A2 | Self::A3], Self::empty()),
+                (XX, XX, XX, XX, oo) => (
+                    vec![Self::A0 | Self::A1 | Self::A2 | Self::A3],
+                    Self::empty(),
+                ),
+                (oo, oo, oo, XX, XX) => (vec![], Self::A3),
+                (XX, oo, oo, XX, XX) => (vec![Self::A0], Self::A3),
+                (oo, XX, oo, XX, XX) => (vec![Self::A1], Self::A3),
+                (XX, XX, oo, XX, XX) => (vec![Self::A0 | Self::A1], Self::A3),
+                (oo, oo, XX, XX, XX) => (vec![], Self::A2 | Self::A3),
+                (XX, oo, XX, XX, XX) => (vec![Self::A0], Self::A2 | Self::A3),
+                (oo, XX, XX, XX, XX) => (vec![], Self::A1 | Self::A2 | Self::A3),
+                (XX, XX, XX, XX, XX) => (vec![], Self::A0 | Self::A1 | Self::A2 | Self::A3),
             };
+            components.extend(comps);
+            middle |= mid;
         }
 
-        order
+        {
+            let (comps, mid) = match (self.b0(), self.b1(), self.m()) {
+                (oo, oo, oo) => (vec![], Self::empty()),
+                (XX, oo, oo) => (vec![Self::B0], Self::empty()),
+                (oo, XX, oo) => (vec![Self::B1], Self::empty()),
+                (XX, XX, oo) => (vec![Self::B0 | Self::B1], Self::empty()),
+                (oo, oo, XX) => (vec![], Self::empty()),
+                (XX, oo, XX) => (vec![Self::B0], Self::empty()),
+                (oo, XX, XX) => (vec![], Self::B1),
+                (XX, XX, XX) => (vec![], Self::B0 | Self::B1),
+            };
+            components.extend(comps);
+            middle |= mid;
+        }
+
+        {
+            let (comps, mid) = match (self.c(), self.m()) {
+                (oo, oo) => (vec![], Self::empty()),
+                (XX, oo) => (vec![Self::C], Self::empty()),
+                (oo, XX) => (vec![], Self::empty()),
+                (XX, XX) => (vec![], Self::C),
+            };
+            components.extend(comps);
+            middle |= mid;
+        }
+
+        if self.m() == XX {
+            components.push(middle);
+        }
+
+        components
+    }
+
+    fn component_order(self) -> u64 {
+        if self.a3() == XX && self.b1() == XX && self.c() == XX {
+            // branched component
+            if self.b0() == XX {
+                // E component
+                if self.a0() == XX {
+                    696729600
+                } else if self.a1() == XX {
+                    2903040
+                } else if self.a2() == XX {
+                    51840
+                } else {
+                    1920
+                }
+            } else {
+                // D component
+                if self.a0() == XX {
+                    322560
+                } else if self.a1() == XX {
+                    23040
+                } else if self.a2() == XX {
+                    1920
+                } else {
+                    192
+                }
+            }
+        } else {
+            // A component
+            match self.0.0.count_ones() {
+                1 => 2,
+                2 => 6,
+                3 => 24,
+                4 => 120,
+                5 => 720,
+                6 => 5040,
+                _ => 40320, // 7
+            }
+        }
+    }
+
+    pub fn order(self) -> u64 {
+        self.components()
+            .into_iter()
+            .map(Self::component_order)
+            .product()
     }
 
     pub fn vertex(self) -> Point {
