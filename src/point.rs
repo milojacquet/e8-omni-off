@@ -1,5 +1,6 @@
 use crate::combs::COMBS;
 use nalgebra::RowSVector;
+use std::cmp::Ordering;
 use std::iter::once;
 use std::ops::Mul;
 
@@ -69,94 +70,127 @@ impl Mul for D8 {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct Point {
+pub struct Orbit {
     pub rep: Vec8,
     pub sign: i16,
-    pub d8: D8,
 }
 
-pub fn d8_orbit_size(rep: Vec8) -> u64 {
-    let mut size = 1;
-    let mut group = 1;
-    for (i, (&x, y)) in rep
-        .iter()
-        .zip(rep.iter().skip(1).map(Some).chain(once(None)))
-        .enumerate()
-    {
-        if Some(&x) == y {
-            group += 1;
-        } else {
-            size *= COMBS[i + 1][group].len() as u64;
-            group = 1;
-        }
-        if x != 0 && i != 0 {
-            size *= 2;
-        }
+impl PartialOrd for Orbit {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
     }
-    size
 }
 
-pub fn d8_orbit_iter(rep: Vec8, sign: i16) -> impl Iterator<Item = Point> {
-    let mut bases = Vec::new();
-    let mut group = 1;
-    let mut signs = 0;
-    for (i, (&x, y)) in rep
-        .iter()
-        .zip(rep.iter().skip(1).map(Some).chain(once(None)))
-        .enumerate()
-    {
-        if Some(&x) == y {
-            group += 1;
-        } else {
-            bases.push((i + 1, group, COMBS[i + 1][group].len() as u64));
-            group = 1;
-        }
-        if x != 0 && i != 0 {
-            signs += 1;
-        }
-    }
-    bases.reverse();
-    let bases = bases;
-
-    let perms = bases.iter().map(|(_, _, p)| p).product();
-
-    (0..perms)
-        .map(move |mut i| {
-            let mut d8 = [None; 8];
-            for (n, k, p) in &bases {
-                let comb_num = COMBS[*n][*k][(i % p) as usize];
-                i /= p;
-
-                let none_iter = d8.iter_mut().filter(|p| p.is_none());
-                for (j, (_, p)) in none_iter
-                    .enumerate()
-                    .filter(|(b, _)| (comb_num >> (n - 1 - b)) & 1 == 1)
-                    .enumerate()
-                {
-                    *p = Some(AxSign::new(n - k + j, 1)) // placeholder sign
-                }
-            }
-
-            let d8 = d8.map(Option::unwrap);
-            let zero_ind = d8.iter().position(|p| p.ax() == 0).unwrap();
-
-            (0u8..1 << signs).map(move |s| {
-                let mut d8 = d8;
-                for p in d8.iter_mut() {
-                    if (s >> (7 - p.ax())) & 1 == 1
-                        || (sign != 0 && p.ax() == 0 && (s.count_ones() % 2 == 0) != (sign == 1))
-                    {
-                        p.flip_sign();
-                    }
-                }
-                Point {
-                    rep,
-                    sign,
-                    d8: D8(d8),
-                }
+impl Ord for Orbit {
+    #[rustfmt::skip] // slow for some reason
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.rep[0].cmp(&other.rep[0]).then_with(|| {
+            self.rep[1].cmp(&other.rep[1]).then_with(|| {
+                self.rep[2].cmp(&other.rep[2]).then_with(|| {
+                    self.rep[3].cmp(&other.rep[3]).then_with(|| {
+                        self.rep[4].cmp(&other.rep[4]).then_with(|| {
+                            self.rep[5].cmp(&other.rep[5]).then_with(|| {
+                                self.rep[6].cmp(&other.rep[6]).then_with(|| {
+                                    self.rep[7]
+                                        .cmp(&other.rep[7])
+                                        .then_with(|| self.sign.cmp(&other.sign))
+                                })
+                            })
+                        })
+                    })
+                })
             })
         })
-        .flatten()
+    }
+}
+
+impl Orbit {
+    pub fn size(self) -> u64 {
+        let mut size = 1;
+        let mut group = 1;
+        for (i, (&x, y)) in self
+            .rep
+            .iter()
+            .zip(self.rep.iter().skip(1).map(Some).chain(once(None)))
+            .enumerate()
+        {
+            if Some(&x) == y {
+                group += 1;
+            } else {
+                size *= COMBS[i + 1][group].len() as u64;
+                group = 1;
+            }
+            if x != 0 && i != 0 {
+                size *= 2;
+            }
+        }
+        size
+    }
+
+    pub fn iter(self) -> impl Iterator<Item = Point> {
+        let mut bases = Vec::new();
+        let mut group = 1;
+        let mut signs = 0;
+        for (i, (&x, y)) in self
+            .rep
+            .iter()
+            .zip(self.rep.iter().skip(1).map(Some).chain(once(None)))
+            .enumerate()
+        {
+            if Some(&x) == y {
+                group += 1;
+            } else {
+                bases.push((i + 1, group, COMBS[i + 1][group].len() as u64));
+                group = 1;
+            }
+            if x != 0 && i != 0 {
+                signs += 1;
+            }
+        }
+        bases.reverse();
+        let bases = bases;
+
+        let perms = bases.iter().map(|(_, _, p)| p).product();
+
+        (0..perms)
+            .map(move |mut i| {
+                let mut d8 = [None; 8];
+                for (n, k, p) in &bases {
+                    let comb_num = COMBS[*n][*k][(i % p) as usize];
+                    i /= p;
+
+                    let none_iter = d8.iter_mut().filter(|p| p.is_none());
+                    for (j, (_, p)) in none_iter
+                        .enumerate()
+                        .filter(|(b, _)| (comb_num >> (n - 1 - b)) & 1 == 1)
+                        .enumerate()
+                    {
+                        *p = Some(AxSign::new(n - k + j, 1)) // placeholder sign
+                    }
+                }
+
+                let d8 = d8.map(Option::unwrap);
+                let zero_ind = d8.iter().position(|p| p.ax() == 0).unwrap();
+
+                (0u8..1 << signs).map(move |s| {
+                    let mut d8 = d8;
+                    for p in d8.iter_mut() {
+                        if (s >> (7 - p.ax())) & 1 == 1
+                            || (self.sign != 0
+                                && p.ax() == 0
+                                && (s.count_ones() % 2 == 0) != (self.sign == 1))
+                        {
+                            p.flip_sign();
+                        }
+                    }
+                    Point {
+                        orbit: self,
+                        d8: D8(d8),
+                    }
+                })
+            })
+            .flatten()
+    }
 }
 
 pub fn opt_bits_to_num(bits: [Option<bool>; 8]) -> u8 {
@@ -168,6 +202,12 @@ pub fn opt_bits_to_num(bits: [Option<bool>; 8]) -> u8 {
         }
     }
     num
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Point {
+    pub orbit: Orbit,
+    pub d8: D8,
 }
 
 impl Point {
@@ -190,15 +230,14 @@ impl Point {
             d8.0[0].flip_sign();
         }
         Self {
-            rep,
-            sign,
+            orbit: Orbit { rep, sign },
             d8: d8.inv(),
         }
     }
 
     pub fn vec(self) -> Vec8 {
-        let mut rep = self.rep;
-        rep[0] *= self.sign;
+        let mut rep = self.orbit.rep;
+        rep[0] *= self.orbit.sign;
         rep * self.d8
     }
 
@@ -207,7 +246,7 @@ impl Point {
     }
 
     pub fn orbit_size(self) -> u64 {
-        d8_orbit_size(self.rep)
+        self.orbit.size()
     }
 
     pub fn orbit_index(self) -> u64 {
@@ -216,9 +255,10 @@ impl Point {
         let mut group = 1;
         let mut signs = 0;
         for (i, (&x, y)) in self
+            .orbit
             .rep
             .iter()
-            .zip(self.rep.iter().skip(1).map(Some).chain(once(None)))
+            .zip(self.orbit.rep.iter().skip(1).map(Some).chain(once(None)))
             .enumerate()
         {
             if Some(&x) == y {
@@ -242,7 +282,7 @@ impl Point {
 
         index <<= signs;
         for p in self.d8.0 {
-            if p.ax() != 0 && self.rep[p.ax()] != 0 && p.sign() == -1 {
+            if p.ax() != 0 && self.orbit.rep[p.ax()] != 0 && p.sign() == -1 {
                 index |= 1 << (7 - p.ax())
             }
         }
@@ -252,8 +292,7 @@ impl Point {
 
     pub fn representative(self) -> Self {
         Self {
-            rep: self.rep,
-            sign: self.sign,
+            orbit: self.orbit,
             d8: D8::identity(),
         }
     }
@@ -263,8 +302,7 @@ impl Mul<D8> for Point {
     type Output = Self;
     fn mul(self, d8: D8) -> Self {
         Self {
-            rep: self.rep,
-            sign: self.sign,
+            orbit: self.orbit,
             d8: self.d8 * d8,
         }
     }
@@ -299,18 +337,47 @@ mod tests {
     }
 
     #[test]
-    fn orbit_size() {
-        assert_eq!(d8_orbit_size([1, 2, 3, 4, 5, 6, 7, 8].into()), 128 * 40320);
-        assert_eq!(d8_orbit_size([0, 2, 3, 4, 5, 6, 7, 8].into()), 128 * 40320);
+    fn d8_orbit_size() {
         assert_eq!(
-            d8_orbit_size([0, 0, 3, 4, 5, 6, 7, 8].into()),
+            Orbit {
+                rep: [1, 2, 3, 4, 5, 6, 7, 8].into(),
+                sign: 1
+            }
+            .size(),
+            128 * 40320
+        );
+        assert_eq!(
+            Orbit {
+                rep: [0, 2, 3, 4, 5, 6, 7, 8].into(),
+                sign: 1
+            }
+            .size(),
+            128 * 40320
+        );
+        assert_eq!(
+            Orbit {
+                rep: [0, 0, 3, 4, 5, 6, 7, 8].into(),
+                sign: 1
+            }
+            .size(),
             64 * 40320 / 2
         );
-        assert_eq!(d8_orbit_size([1, 1, 1, 1, 1, 1, 1, 1].into()), 128);
+        assert_eq!(
+            Orbit {
+                rep: [1, 1, 1, 1, 1, 1, 1, 1].into(),
+                sign: 1
+            }
+            .size(),
+            128
+        );
     }
 
     fn d8_orbit_index_consistent(rep: [i16; 8]) {
-        for (i, point) in d8_orbit_iter(rep.into(), 1).enumerate() {
+        let orbit = Orbit {
+            rep: rep.into(),
+            sign: 1,
+        };
+        for (i, point) in orbit.iter().enumerate() {
             if i % 100000 == 0 {
                 println!("{i}")
             }
