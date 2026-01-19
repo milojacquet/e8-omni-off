@@ -1,6 +1,5 @@
 use crate::combs::COMBS;
 use nalgebra::RowSVector;
-use std::cmp::Ordering;
 use std::iter::once;
 use std::ops::Mul;
 
@@ -39,6 +38,12 @@ impl AxSign {
 pub struct D8([AxSign; 8]);
 
 impl D8 {
+    pub fn new(axs: [AxSign; 8]) -> Self {
+        let new = Self(axs);
+        assert!(new.signs_even(), "{:?}", axs);
+        new
+    }
+
     pub fn identity() -> Self {
         Self([0, 1, 2, 3, 4, 5, 6, 7].map(AxSign))
     }
@@ -49,6 +54,10 @@ impl D8 {
             inv[p.ax()] = AxSign::new(i, p.sign());
         }
         Self(inv)
+    }
+
+    pub fn signs_even(self) -> bool {
+        self.0.iter().filter(|x| x.sign() == -1).count() % 2 == 0
     }
 }
 
@@ -62,9 +71,9 @@ impl Mul<D8> for Vec8 {
 impl Mul for D8 {
     type Output = Self;
     fn mul(self, other: Self) -> Self {
-        Self(self.0.map(|p| {
-            let other_p = other.0[p.ax()];
-            AxSign::new(other_p.ax(), p.sign() * other_p.sign())
+        Self(other.0.map(|p| {
+            let self_p = self.0[p.ax()];
+            AxSign::new(self_p.ax(), p.sign() * self_p.sign())
         }))
     }
 }
@@ -73,35 +82,6 @@ impl Mul for D8 {
 pub struct Orbit {
     pub rep: Vec8,
     pub sign: i16,
-}
-
-impl PartialOrd for Orbit {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Ord for Orbit {
-    #[rustfmt::skip] // slow for some reason
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.rep[0].cmp(&other.rep[0]).then_with(|| {
-            self.rep[1].cmp(&other.rep[1]).then_with(|| {
-                self.rep[2].cmp(&other.rep[2]).then_with(|| {
-                    self.rep[3].cmp(&other.rep[3]).then_with(|| {
-                        self.rep[4].cmp(&other.rep[4]).then_with(|| {
-                            self.rep[5].cmp(&other.rep[5]).then_with(|| {
-                                self.rep[6].cmp(&other.rep[6]).then_with(|| {
-                                    self.rep[7]
-                                        .cmp(&other.rep[7])
-                                        .then_with(|| self.sign.cmp(&other.sign))
-                                })
-                            })
-                        })
-                    })
-                })
-            })
-        })
-    }
 }
 
 impl Orbit {
@@ -170,7 +150,6 @@ impl Orbit {
                 }
 
                 let d8 = d8.map(Option::unwrap);
-                let zero_ind = d8.iter().position(|p| p.ax() == 0).unwrap();
 
                 (0u8..1 << signs).map(move |s| {
                     let mut d8 = d8;
@@ -185,7 +164,7 @@ impl Orbit {
                     }
                     Point {
                         orbit: self,
-                        d8: D8(d8),
+                        d8: D8::new(d8),
                     }
                 })
             })
@@ -213,6 +192,10 @@ pub struct Point {
 impl Point {
     pub fn new(vec: Vec8) -> Self {
         let sign = vec.iter().map(|x| x.signum()).product();
+        let sign_pm1: i16 = vec
+            .iter()
+            .map(|x| if x.signum() == 0 { 1 } else { x.signum() })
+            .product();
         let mut deco = [
             (vec[0].abs(), AxSign::new(0, vec[0].signum())),
             (vec[1].abs(), AxSign::new(1, vec[1].signum())),
@@ -225,10 +208,12 @@ impl Point {
         ]; // why won't they stabilize zip
         deco.sort_by_key(|(x, _)| *x);
         let rep = deco.map(|(x, _)| x).into();
-        let mut d8 = D8(deco.map(|(_, p)| p));
-        if sign == -1 {
-            d8.0[0].flip_sign();
+        let mut d8_inner = deco.map(|(_, p)| p);
+        if sign_pm1 == -1 {
+            d8_inner[0].flip_sign();
         }
+        // eprintln!("{:?}", vec);
+        let d8 = D8::new(d8_inner);
         Self {
             orbit: Orbit { rep, sign },
             d8: d8.inv(),
@@ -301,10 +286,14 @@ impl Point {
 impl Mul<D8> for Point {
     type Output = Self;
     fn mul(self, d8: D8) -> Self {
-        Self {
-            orbit: self.orbit,
-            d8: self.d8 * d8,
-        }
+        // TODO: don't roundtrip through vec
+        Self::new(
+            Self {
+                orbit: self.orbit,
+                d8: self.d8 * d8,
+            }
+            .vec(),
+        )
     }
 }
 
@@ -314,9 +303,9 @@ mod tests {
 
     #[test]
     fn d8_order() {
-        let d8 = D8([1, 2, !0, 3, 4, 5, 6, !7].map(AxSign));
+        let d8 = D8::new([1, 2, !0, 3, 4, 5, 6, !7].map(AxSign));
         assert_eq!(d8 * d8 * d8 * d8 * d8 * d8, D8::identity());
-        let d8_2 = D8([0, 1, 2, !6, 3, 4, 5, !7].map(AxSign));
+        let d8_2 = D8::new([0, 1, 2, !6, 3, 4, 5, !7].map(AxSign));
         assert_eq!(d8 * d8.inv(), D8::identity());
         assert_eq!(d8_2 * d8_2.inv(), D8::identity());
         assert_eq!(d8 * d8_2 * d8.inv() * d8_2.inv(), D8::identity());
@@ -405,5 +394,45 @@ mod tests {
     #[test]
     fn d8_orbit_index_consistent_00122333() {
         d8_orbit_index_consistent([0, 0, 1, 2, 2, 3, 3, 3])
+    }
+
+    #[test]
+    fn d8_mul_weird() {
+        let v: Vec8 = [0, 0, 0, 0, 0, 0, 2, 2].into();
+        let d8_1 = D8::new([
+            AxSign(0),
+            AxSign(1),
+            AxSign(2),
+            AxSign(3),
+            AxSign(-7),
+            AxSign(4),
+            AxSign(5),
+            AxSign(-8),
+        ]);
+        let d8_2 = D8::new([
+            AxSign(-2),
+            AxSign(2),
+            AxSign(-5),
+            AxSign(-6),
+            AxSign(-7),
+            AxSign(0),
+            AxSign(-4),
+            AxSign(-8),
+        ]);
+
+        assert_eq!(v * (d8_1 * d8_2), (v * d8_1) * d8_2)
+    }
+
+    #[test]
+    fn point_mul_eq() {
+        let point = Point::new([0, 0, 0, 0, 0, 0, 2, 2].into());
+        let d8 = D8::new([1, 0, 2, 3, 4, 5, 6, 7].map(AxSign));
+        assert_eq!(point * d8, point);
+    }
+
+    #[test]
+    fn point_d8_even() {
+        let point = Point::new([0, 0, 0, 0, 0, 0, -2, 2].into());
+        assert!(point.d8.signs_even());
     }
 }

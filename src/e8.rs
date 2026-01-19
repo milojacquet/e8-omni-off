@@ -3,15 +3,11 @@ use crate::e8::Ring::oo;
 use crate::point::Point;
 use crate::point::Vec8;
 use bitflags::bitflags;
-use fxhash::FxHashMap;
-use fxhash::FxHasher;
-use nalgebra::RowSVector;
+use fxhash::FxHashSet;
 use nalgebra::SMatrix;
 use nalgebra::matrix;
 use rand::distr::StandardUniform;
 use rand::prelude::*;
-use std::collections::HashMap;
-use std::collections::HashSet;
 use std::ops::Mul;
 use std::str::FromStr;
 
@@ -30,7 +26,7 @@ pub enum Mirror {
 }
 
 impl Mirror {
-    const ALL: [Self; 8] = [
+    pub const ALL: [Self; 8] = [
         Self::A0,
         Self::A1,
         Self::A2,
@@ -42,7 +38,7 @@ impl Mirror {
     ];
 
     /// reflection pole with norm 2√2
-    pub fn pole(&self) -> Vec8 {
+    pub fn pole(self) -> Vec8 {
         match self {
             Mirror::C => matrix![2, -2, 0, 0, 0, 0, 0, 0],
             Mirror::M => matrix![0, 2, -2, 0, 0, 0, 0, 0],
@@ -55,7 +51,15 @@ impl Mirror {
         }
     }
 
-    pub fn mat(&self) -> E8 {
+    pub fn link(self, other: Self) -> u32 {
+        match self.pole().dot(&other.pole()) {
+            8 => 1,
+            -4 => 3,
+            _ => 2,
+        }
+    }
+
+    pub fn mat(self) -> E8 {
         E8(SMatrix::identity() * 4 - self.pole().transpose() * self.pole())
     }
 }
@@ -83,7 +87,7 @@ pub struct E8(SMatrix<i16, 8, 8>);
 
 impl E8 {
     pub fn identity() -> Self {
-        E8(SMatrix::identity() * 2)
+        E8(SMatrix::identity() * 4)
     }
 
     pub fn inv(self) -> Self {
@@ -174,7 +178,7 @@ impl MirrorSet {
         if self.contains(Self::M) { XX } else { oo }
     }
 
-    pub fn mirror(mirror: Mirror) -> Self {
+    pub fn from_mirror(mirror: Mirror) -> Self {
         match mirror {
             Mirror::A0 => Self::A0,
             Mirror::A1 => Self::A1,
@@ -211,6 +215,14 @@ impl MirrorSet {
             Mirror::C => self.set(Self::C, val == XX),
             Mirror::M => self.set(Self::M, val == XX),
         }
+    }
+
+    pub fn mirrors(self) -> impl Iterator<Item = Mirror> {
+        Mirror::ALL.into_iter().filter(move |m| self.has_mirror(*m))
+    }
+
+    pub fn size(self) -> u32 {
+        self.0.0.count_ones()
     }
 
     pub fn components(self) -> Vec<Self> {
@@ -312,7 +324,7 @@ impl MirrorSet {
             }
         } else {
             // A component
-            match self.0.0.count_ones() {
+            match self.size() {
                 1 => 2,
                 2 => 6,
                 3 => 24,
@@ -329,6 +341,10 @@ impl MirrorSet {
             .into_iter()
             .map(Self::component_order)
             .product()
+    }
+
+    pub fn vertex_count(self) -> u64 {
+        E8_SIZE / self.complement().order()
     }
 
     pub fn vertex(self) -> Point {
@@ -348,23 +364,30 @@ impl MirrorSet {
         Point::new(cvec * cmat)
     }
 
-    pub fn vertex_orbits(self) -> FxHashMap<Point, E8> {
-        let total_vertices = E8_SIZE / self.complement().order();
-        let vertex = self.vertex().representative();
+    pub fn vertex_orbits(self) -> Vec<(Point, E8)> {
+        let total_vertices = self.vertex_count();
+        let vertex = self.vertex();
         let mut seen_vertices = 0;
-        let mut orbits = HashMap::from_iter([]);
+        let mut orbits = FxHashSet::from_iter([]);
+        let mut points = Vec::new();
         let mut rng = rand::rng();
         loop {
             let e8: E8 = rng.random();
-            let v = (vertex * e8).representative();
-            if orbits.insert(v, e8).is_none() {
-                seen_vertices += v.orbit_size();
+            let point = vertex * e8;
+            if orbits.insert(point.orbit) {
+                points.push((point, e8));
+                seen_vertices += point.orbit.size();
             }
             if seen_vertices == total_vertices {
                 break;
             }
         }
-        orbits
+        points.sort_by_key(|v| (v.0.orbit.rep.data.0, v.0.orbit.sign));
+        points
+    }
+
+    pub fn iter_all() -> impl Iterator<Item = Self> {
+        (0..=255).map(|b| Self::from_bits(b).unwrap())
     }
 }
 
@@ -402,18 +425,18 @@ mod tests {
 
     #[test]
     fn all_sizes_divisible() {
-        for bits_out in 0..=255 {
-            for bits_in in 0..=255 {
-                if bits_in & bits_out == bits_in {
-                    let size_out = MirrorSet::from_bits(bits_out).unwrap().order();
-                    let size_in = MirrorSet::from_bits(bits_in).unwrap().order();
+        for set_out in MirrorSet::iter_all() {
+            for set_in in MirrorSet::iter_all() {
+                if set_in & set_out == set_in {
+                    let size_out = set_out.order();
+                    let size_in = set_in.order();
                     assert_eq!(
                         size_out % size_in,
                         0,
                         "{:08b} [{}] % {:08b} [{}]",
-                        bits_out,
+                        set_out,
                         size_out,
-                        bits_in,
+                        set_in,
                         size_in
                     );
                 }
