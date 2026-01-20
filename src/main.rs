@@ -13,6 +13,16 @@ mod e8;
 mod off;
 mod point;
 
+fn print_size(size: u64) {
+    if size < 10_000_000_000 {
+        println!("Estimated size: {} MB", size / 1_000_000);
+    } else if size < 10_000_000_000_000 {
+        println!("Estimated size: {} GB", size / 1_000_000_000);
+    } else {
+        println!("Estimated size: {} TB", size / 1_000_000_000_000);
+    }
+}
+
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
 struct Cli {
@@ -26,6 +36,10 @@ struct Cli {
     /// Vertex orbits
     #[arg(short, long)]
     vertices: bool,
+
+    /// Estimated size of .off
+    #[arg(long)]
+    off_size: bool,
 
     /// Write .off
     #[arg(short, long, value_name = "FILE")]
@@ -52,7 +66,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             arr[0] *= vertex.orbit.sign;
             println!("{:?}", arr)
         }
+    } else if cli.off_size {
+        let size = mirror_set.off_size_estimate();
+        print_size(size);
     } else if let Some(file) = cli.off {
+        let size = mirror_set.off_size_estimate();
+        print_size(size);
         let mut writer = BufWriter::new(File::create(file)?);
         mirror_set.write_off(&mut writer)?;
         writer.flush()?;

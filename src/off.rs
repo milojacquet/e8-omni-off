@@ -11,6 +11,18 @@ use std::collections::VecDeque;
 use std::fmt::Display;
 use std::io::Write;
 
+fn num_length_i16(x: i16) -> u64 {
+    x.to_string().len() as u64
+}
+
+fn num_length_usize(x: usize) -> u64 {
+    x.to_string().len() as u64
+}
+
+fn num_length_u64(x: u64) -> u64 {
+    x.to_string().len() as u64
+}
+
 #[derive(Debug, Clone)]
 struct PointSet {
     orbits: Vec<(Orbit, (E8, D8))>,
@@ -98,6 +110,49 @@ impl MirrorSet {
                             .any(|mm| face.has_mirror(mm) && mm.link(m) == 3))
             })
             .fold(Self::empty(), |x, y| x | Self::from_mirror(y))
+    }
+
+    pub fn off_size_estimate(self) -> u64 {
+        let mut size = 0;
+        let face_types = self.face_types();
+        let point_sets: [PointSet; 9] = face_types.clone().map(|types| {
+            PointSet::new(
+                types
+                    .iter()
+                    .flat_map(|face| self.face_center(*face).vertex_orbits()),
+            )
+        });
+        // dbg!(face_types, face_centers);
+
+        for (orbit, _) in &point_sets[0].orbits {
+            size += (8 * num_length_i16(orbit.rep.max()) + 12) * orbit.size();
+        }
+
+        for i in 2..8 {
+            for &face_type in face_types[i].iter() {
+                // kind of overkill but if it's a problem wait until you see what comes next
+                let mut subfaces = FxHashSet::from_iter([]);
+                for &subface_type in &face_types[i - 1] {
+                    if face_type.contains(subface_type) {
+                        let mut stack =
+                            VecDeque::from_iter([self.face_center(subface_type).vertex()]);
+                        while let Some(v) = stack.pop_front() {
+                            if subfaces.insert(v) {
+                                for mirror in face_type.mirrors() {
+                                    stack.push_back(v * mirror.mat());
+                                }
+                            }
+                        }
+                    }
+                }
+
+                size += (num_length_usize(subfaces.len())
+                    + subfaces.len() as u64 * (1 + num_length_u64(point_sets[i - 1].len())))
+                    * self.face_center(face_type).vertex_count();
+            }
+        }
+
+        size
     }
 
     pub fn write_off(self, mut writer: impl Write) -> Result<(), Box<dyn std::error::Error>> {
