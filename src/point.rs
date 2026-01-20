@@ -1,4 +1,6 @@
-use crate::combs::COMBS;
+use crate::combs::COMBS_INDS;
+use crate::combs::COMBS_LENS;
+use crate::combs::COMBS_LISTS;
 use nalgebra::RowSVector;
 use std::iter::once;
 use std::ops::Mul;
@@ -97,7 +99,7 @@ impl Orbit {
             if Some(&x) == y {
                 group += 1;
             } else {
-                size *= COMBS[i + 1][group].len() as u64;
+                size *= COMBS_LENS[i + 1][group];
                 group = 1;
             }
             if x != 0 && i != 0 {
@@ -120,7 +122,7 @@ impl Orbit {
             if Some(&x) == y {
                 group += 1;
             } else {
-                bases.push((i + 1, group, COMBS[i + 1][group].len() as u64));
+                bases.push((i + 1, group, COMBS_LENS[i + 1][group]));
                 group = 1;
             }
             if x != 0 && i != 0 {
@@ -136,7 +138,7 @@ impl Orbit {
             .map(move |mut i| {
                 let mut d8 = [None; 8];
                 for (n, k, p) in &bases {
-                    let comb_num = COMBS[*n][*k][(i % p) as usize];
+                    let comb_num = COMBS_LISTS[*n][*k][(i % p) as usize];
                     i /= p;
 
                     let none_iter = d8.iter_mut().filter(|p| p.is_none());
@@ -253,8 +255,8 @@ impl Point {
                         Some(p.ax() + group > i)
                     }
                 }));
-                index *= COMBS[i + 1][group].len() as u64;
-                index += COMBS[i + 1][group].binary_search(&comb_num).unwrap() as u64;
+                index *= COMBS_LENS[i + 1][group];
+                index += COMBS_INDS[i + 1][comb_num as usize];
                 group = 1;
             }
             if x != 0 && i != 0 {
