@@ -1,5 +1,7 @@
 Generate .off files for Wythoffian E8 polytopes. Run with `cargo run -r -- [ARGS]`.
 
+The mirrors are named `A0 A1 A2 A3 B0 B1 C M`, where `A0 B0 C` are the nodes on the length 4, 2, 1 ends respectively.
+
 ```
 Usage: e8-omni-off [OPTIONS] [MIRRORS]...
 
