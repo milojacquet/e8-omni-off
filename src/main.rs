@@ -44,6 +44,10 @@ struct Cli {
     /// Write .off
     #[arg(short, long, value_name = "FILE")]
     off: Option<PathBuf>,
+
+    /// Dimension limit
+    #[arg(long)]
+    dim_limit: Option<usize>,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -73,7 +77,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let size = mirror_set.off_size_estimate();
         print_size(size);
         let mut writer = BufWriter::new(File::create(file)?);
-        mirror_set.write_off(&mut writer)?;
+        mirror_set.write_off(&mut writer, cli.dim_limit)?;
         writer.flush()?;
     } else {
         println!("what");

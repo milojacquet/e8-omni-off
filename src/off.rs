@@ -155,7 +155,12 @@ impl MirrorSet {
         size
     }
 
-    pub fn write_off(self, mut writer: impl Write) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn write_off(
+        self,
+        mut writer: impl Write,
+        dim_limit: Option<usize>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let dim_limit = dim_limit.unwrap_or(8);
         let face_types = self.face_types();
         let point_sets: [PointSet; 9] = face_types.clone().map(|types| {
             PointSet::new(
@@ -176,61 +181,65 @@ impl MirrorSet {
         }
         write!(writer, "\n\n")?;
 
-        println!("Vertices");
-        write!(writer, "# Vertices\n")?;
-        for (vertex, _) in point_sets[0].iter() {
-            write_spaced(&mut writer, vertex.vec().iter())?;
-            write!(writer, "\n")?;
-        }
-        write!(writer, "\n")?;
-
-        write!(writer, "# Faces\n")?;
-        for &face_type in face_types[2].iter() {
-            println!("Faces: {face_type:?}");
-            let vertex = self.vertex();
-            let &[m1, m2] = &face_type.mirrors().collect::<Vec<_>>()[..] else {
-                panic!("not two")
-            };
-
-            let vertices = if m1.link(m2) == 2 {
-                vec![
-                    vertex,
-                    vertex * m1.mat(),
-                    vertex * m2.mat() * m1.mat(),
-                    vertex * m2.mat(),
-                ]
-            } else if self & face_type == face_type {
-                vec![
-                    vertex,
-                    vertex * m1.mat(),
-                    vertex * m2.mat() * m1.mat(),
-                    vertex * m1.mat() * m2.mat() * m1.mat(),
-                    vertex * m1.mat() * m2.mat(),
-                    vertex * m2.mat(),
-                ]
-            } else {
-                vec![
-                    vertex,
-                    vertex * m2.mat() * m1.mat(),
-                    vertex * m1.mat() * m2.mat(),
-                ]
-            };
-
-            // already did this once, is that ok
-            for (_point, (e8, d8)) in
-                PointSet::new(self.face_center(face_type).vertex_orbits().into_iter()).iter()
-            {
-                write!(writer, "{}", vertices.len())?;
-
-                for &vertex in &vertices {
-                    write!(writer, " {}", point_sets[0].index(vertex * e8 * d8))?;
-                }
+        if dim_limit >= 0 {
+            println!("Vertices");
+            write!(writer, "# Vertices\n")?;
+            for (vertex, _) in point_sets[0].iter() {
+                write_spaced(&mut writer, vertex.vec().iter())?;
                 write!(writer, "\n")?;
             }
+            write!(writer, "\n")?;
         }
-        write!(writer, "\n")?;
 
-        for i in 3..8 {
+        if dim_limit >= 1 {
+            write!(writer, "# Faces\n")?;
+            for &face_type in face_types[2].iter() {
+                println!("Faces: {face_type:?}");
+                let vertex = self.vertex();
+                let &[m1, m2] = &face_type.mirrors().collect::<Vec<_>>()[..] else {
+                    panic!("not two")
+                };
+
+                let vertices = if m1.link(m2) == 2 {
+                    vec![
+                        vertex,
+                        vertex * m1.mat(),
+                        vertex * m2.mat() * m1.mat(),
+                        vertex * m2.mat(),
+                    ]
+                } else if self & face_type == face_type {
+                    vec![
+                        vertex,
+                        vertex * m1.mat(),
+                        vertex * m2.mat() * m1.mat(),
+                        vertex * m1.mat() * m2.mat() * m1.mat(),
+                        vertex * m1.mat() * m2.mat(),
+                        vertex * m2.mat(),
+                    ]
+                } else {
+                    vec![
+                        vertex,
+                        vertex * m2.mat() * m1.mat(),
+                        vertex * m1.mat() * m2.mat(),
+                    ]
+                };
+
+                // already did this once, is that ok
+                for (_point, (e8, d8)) in
+                    PointSet::new(self.face_center(face_type).vertex_orbits().into_iter()).iter()
+                {
+                    write!(writer, "{}", vertices.len())?;
+
+                    for &vertex in &vertices {
+                        write!(writer, " {}", point_sets[0].index(vertex * e8 * d8))?;
+                    }
+                    write!(writer, "\n")?;
+                }
+            }
+            write!(writer, "\n")?;
+        }
+
+        for i in 3..=dim_limit {
             write!(writer, "# {i}-faces\n")?;
             for &face_type in face_types[i].iter() {
                 println!("{i}-faces: {face_type:?}");
